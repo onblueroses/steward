@@ -1,34 +1,18 @@
-# Security Policy
+# Security policy
 
-## Supported Versions
+## Supported versions
 
-This project is pre-1.0. Only the latest released minor version receives
-security fixes.
+This project is before 1.0. Only the latest minor version gets security fixes.
 
-| Version | Supported |
-|---------|-----------|
-| 0.1.x   | yes       |
-| < 0.1   | no        |
+## Report a vulnerability
 
-## Reporting a Vulnerability
+Open a private security advisory from the Security tab of this repository. Describe the problem in
+general terms. Do not put an exploit in a public issue.
 
-Open a GitHub issue labelled `security:` describing the issue in general
-terms (no exploit payload in the public issue). The maintainer will reply
-with a private channel for details. If the issue is severe, request a
-private security advisory directly from the repository's Security tab.
-
-Please do not disclose the vulnerability publicly until a fix has shipped.
-
-## Disclosure Policy
-
-Coordinated disclosure within 90 days of report, or sooner if a fix is
-released earlier. Credit will be given in the changelog unless the reporter
-requests anonymity.
+Please do not disclose the problem in public until a fix is released. Disclosure is coordinated
+within 90 days of the report, or sooner when a fix is released earlier.
 
 ## Scope
 
-This policy covers the `simple-autonomous-agent` package only. Issues in
-upstream dependencies (`openai`, `pyyaml`) should be reported to those
-projects directly. Issues in the example scripts under `examples/` are
-out of scope; they are illustrative demos, not part of the supported
-library surface.
+This policy covers the `steward` package. Report problems in the optional `openai` dependency to
+that project. The example tracker and the recording are demo data.

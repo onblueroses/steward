@@ -1,49 +1,24 @@
 # Contributing
 
-Thanks for considering a contribution. This library is small on purpose;
-please keep it that way.
+This repository is small on purpose. A reader must understand it in one afternoon. Keep it so.
 
-## Dev setup
-
-```bash
-uv venv
-source .venv/bin/activate
-uv pip install -e .[dev]
-```
-
-## Running the test suite
+## Installation and tests
 
 ```bash
-pytest -q
+uv sync
+uv run pytest
 ```
 
-The suite uses mocks for every LLM call; no API keys are needed.
+The tests need no key and no network. The live GitHub test runs only with credentials.
 
-## Type and dedup gates
+## Rules for a change
 
-```bash
-pyright simple_agent/
-python scripts/check_dedup.py
-```
-
-`check_dedup.py` enforces that every sync/async function pair shares an
-extracted core. New code that adds a sync/async pair must keep the
-non-shared body within the budget (`MAX_UNIQUE_LINES`).
-
-## PR expectations
-
-- One logical change per PR. If the work touches multiple concerns,
-  split it.
-- One test per behavior change. Bug fixes ship with a regression test.
-- No new runtime dependencies without an issue discussion first. The
-  current dependencies are `openai` and `pyyaml`, period.
-- No defensive code for scenarios that can't happen. Trust the declared
-  dependencies. Validate at system boundaries only.
-- Comments explain WHY, not WHAT. The reader knows Python.
-- Commit messages: subject-only, present tense, under 70 chars; describe
-  the WHY in the PR body if needed.
-
-## Out of scope
-
-This library does NOT do tool calls, multi-agent conversation, or RAG.
-Those belong in a different project. Please don't add them.
+- A new mechanism comes with a test that fails without it. Add a control beside each failure case.
+- A failed read, call or search must stay a failure. Never turn it into an empty result.
+- A new number in `steward.toml` goes into `[limits]` with its kind and its source. The loader refuses it otherwise.
+- Do not add a delete tool. Correct a write with a further write.
+- Tool docstrings, error messages and the standing file are read by a model. Write them in short,
+  active sentences without semicolons.
+- No new runtime dependency without an issue first. The core has none. `openai` is an optional extra.
+- Comments explain why. The reader knows Python.
+- Commit subjects are short, capitalized and in the imperative.

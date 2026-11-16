@@ -1,324 +1,151 @@
-# simple-autonomous-agent in detail
-
-This file holds the full description of the `Agent`, the content pipeline and their options. The
-short overview is in the [README](../README.md).
-
-## Agent quick start
-
-```python
-from simple_agent import Agent, create_client
-
-def calculate(expression: str) -> str:
-    """Evaluate a numeric arithmetic expression."""
-    import ast, operator
-    ops = {ast.Add: operator.add, ast.Sub: operator.sub,
-           ast.Mult: operator.mul, ast.Div: operator.truediv}
-    def _eval(node):
-        if isinstance(node, ast.Constant): return node.value
-        if isinstance(node, ast.BinOp): return ops[type(node.op)](_eval(node.left), _eval(node.right))
-        raise ValueError("disallowed")
-    return str(_eval(ast.parse(expression, mode="eval").body))
-
-def lookup_constant(name: str) -> str:
-    """Return a known mathematical or physical constant."""
-    return {"pi": "3.14159", "speed_of_light": "2.998e8 m/s"}.get(name, "unknown")
-
-client = create_client("https://openrouter.ai/api/v1", "your-key")
-agent = Agent(
-    client=client,
-    model="google/gemma-4-31b-it:free",
-    tools=[calculate, lookup_constant],
-    system_prompt="Use tools when you need to compute or look up values.",
-    max_steps=6,
-)
-
-result = agent.run("What is pi times 1000?")
-print(result.output)        # "3141.59"
-print(result.steps)         # 2
-print(result.terminated)    # "done"
-```
-
-Tools are plain functions with type hints. The agent makes the OpenAI tool spec from them. It
-sends each tool call to its function and gives the result back to the model. It repeats this until
-the model gives a final answer or the loop reaches `max_steps`. There is no decorator, no registry
-and no plugin system.
-
-## Why this library and not a larger framework
-
-LangChain, CrewAI and AutoGen give an orchestration layer with many abstractions, plugin systems
-and hundreds of transitive dependencies. The newer small frameworks (smolagents, OpenAI Agents
-SDK) are closer to this library. They still bring their own runtime parts: tool registries, handoff
-primitives and tracing infrastructure. This library has two entry points and nothing else:
-
-- An `Agent` for tool-calling loops.
-- A `run_pipeline` for score-ground-reason-draft content workflows.
-
-Its properties:
+# Details
 
-- **Two runtime dependencies** (`openai`, `pyyaml`). There is no dependency tree to audit.
-- **Two small entry points.** `Agent` is a bounded tool loop. `run_pipeline` is a multi-model
-  content pipeline. You can use one, the other or both. They do not depend on each other.
-- **Multi-model routing.** Cheap models score, thinking models reason and writing models draft.
-  You do not pay the price of a large model to decide if an item is worth processing.
-- **Output checks.** Regex rules find AI writing patterns before the output leaves the pipeline.
-  Examples are em dashes, the `delve/crucial/landscape/showcase/tapestry` vocabulary, vague
-  attributions, negative parallelism, knowledge-cutoff disclaimers and prompt-leak fragments.
-- **Each stage fails independently.** If your search API is down, the draft still happens without
-  grounding. A failure does not stop the next stages.
-- **Cost-gated grounding.** An optional `needs_search` predicate runs before `ground_fn`. You do not
-  pay for a search call when the question does not need new facts.
-- **Prompt versioning.** `compute_prompt_hash(text)` returns a 16-character SHA-256 prefix. You can
-  keep it next to the prompt.
+This page gives the depth behind the README: the files, the order of each operation, the exit
+codes, and the omitted features.
 
-## The Agent
+## The state folder
 
-### Tools
+Every file in `state/` is append-only JSONL, except the SQLite question store, the key and the stamp.
 
-Tools are callables since v0.3.0. The agent reads the signature and type hints of each function
-and makes the OpenAI tool spec from them:
-
-```python
-def search(query: str, limit: int = 5) -> str: ...
-def lookup(name: str | None = None) -> str: ...
-
-agent = Agent(client=client, model="...", tools=[search, lookup])
-```
-
-Supported parameter types are `str`, `int`, `float`, `bool`, `list[T]`, `Optional[T]` and
-`T | None`. A parameter is required only if it has no default value and its annotation is not
-optional. A parameter without a type, or with an unsupported type, raises `TypeError` when you
-make the agent.
-
-Raw dict tool specs are deferred to a later release.
-
-### Termination
-
-`AgentResult.terminated` is one of three strings:
-
-- `"done"`: the model returned content with no tool calls. `result.output` is that content.
-- `"max_steps"`: the loop used all its steps. `result.output` is the last model content. It can be
-  empty.
-- `"no_progress"`: the model returned no content and no tool calls. `result.output` is `""`.
-
-`result.steps` counts model calls. One assistant response is one step, also when it contains many
-parallel tool calls.
-
-### Memory
-
-The caller owns the memory. Give a list, and the agent adds messages to that list in place. The
-same list comes back as `result.messages`:
-
-```python
-mem: list[dict] = []
-agent.run("first question", memory=mem)
-agent.run("follow-up", memory=mem)       # same conversation
-```
-
-If `system_prompt` is set, the agent puts the system message at index 0. It does this only when the
-memory is empty or does not start with a system message. Repeated runs on the same memory do not
-add a second copy.
-
-### Tool errors are observations
-
-An exception in a tool does not stop the agent. The agent writes the exception into a tool message
-(`"Error: TypeError('bad arg')"`). The model can read it and try again in the remaining steps. If a
-tool exception must stop the agent, catch it inside the tool and raise it again outside the agent.
-
-### Retries
-
-LLM calls retry on `RateLimitError`, `APITimeoutError` and `APIConnectionError` with exponential
-backoff. The defaults are 2 retries and a base delay of 1.0 s. Set `max_retries=` and
-`retry_base_delay=` on the `Agent` constructor to change them.
-
-## Anti-patterns
-
-- **Do not send the same request to N models in parallel and pick the best.** This uses many tokens
-  and gives unclear results. Use the score-then-route pattern.
-- **Do not run tool loops without a step limit.** Agents that do not stop are a real problem.
-  `Agent` requires `max_steps >= 1` at construction. Increase it only with a reason.
-- **Do not replace dependencies with stubs that only raise.** `import openai` already raises a clear
-  error when openai is not installed. The same applies to your library: use declared dependencies
-  and do not hide missing ones.
-- **Do not write defensive code for cases that cannot happen.** Validate at system boundaries (user
-  input, network responses). Trust types inside the code.
-
-## Async
-
-`AsyncAgent` has the same constructor as `Agent` and runs with `await agent.arun(task)`. Tools can
-be `async def`, a `functools.partial` around an async function, or sync functions. The agent finds
-awaitable results and awaits them. The sync `Agent` rejects awaitable tool results.
-
-```python
-from simple_agent import AsyncAgent, acreate_client
-
-client = acreate_client("https://openrouter.ai/api/v1", "your-key")
-
-async def fetch_price(symbol: str) -> str:
-    """Look up a current stock price."""
-    ...  # your async HTTP call
-
-agent = AsyncAgent(client=client, model="...", tools=[fetch_price])
-result = await agent.arun("What's TSLA trading at?")
-```
-
-The content pipeline also has async versions: `arun_pipeline`, `arun_batch`, `ascore`, `areason`,
-`adraft` and `acreate_client`. `arun_batch` uses `asyncio.Semaphore` to limit concurrency, not
-`time.sleep`.
-
-## The content pipeline
-
-Use the pipeline when you need score-ground-reason-draft-validate-persist and not an open tool
-loop:
-
-```text
-Input item
-    |
-    v
-[Score]          cheap model decides if the item is worth processing
-    |
-    v
-[Select persona] picks the right voice for the content
-    |
-    v
-[Ground]         calls your search function for real-world context (optional)
-    |
-    v
-[Reason]         thinking model analyzes the content + grounding
-    |
-    v
-[Draft]          writing model generates output in persona voice
-    |
-    v
-[Validate]       regex rules catch AI writing patterns in the output
-    |
-    v
-[Persist]        SQLite state store for deduplication and run logs (optional)
-```
-
-Each stage fails independently. If search is down, the draft still happens without grounding
-context. If the reasoning model times out, the writer works without the analysis.
-
-### Pipeline quick start
-
-```python
-from simple_agent import (
-    ModelConfig, PipelineConfig, create_client,
-    load_persona, run_pipeline,
-)
-
-client = create_client("https://openrouter.ai/api/v1", "your-key")
-
-config = PipelineConfig(
-    scorer=ModelConfig("nvidia/nemotron-nano-9b-v2:free", max_tokens=256),
-    reasoner=ModelConfig("deepseek/deepseek-v4-flash:free", max_tokens=1024),
-    writer=ModelConfig("google/gemma-4-31b-it:free", max_tokens=1024),
-    scorer_client=client,
-    writer_client=client,
-    score_threshold=0.6,
-)
-
-persona = load_persona("personas/analyst.yaml")
-item = {"id": "1", "text": "How do open-source dependency audit tools compare on signal-to-noise?"}
-
-result = run_pipeline(item, config, personas=[persona])
-print(result.draft)
-```
-
-The pipeline uses three models for three jobs. A small model scores (pennies per thousand calls). A
-long-context model analyzes. A stronger model writes the draft. The model IDs are OpenRouter free
-tier as of 2026-05-15. You can use any OpenAI-compatible provider.
-
-### Modules
-
-- **`llm.py`**: `create_client()`, `score()`, `reason()`, `draft()` and their async versions.
-  `score()` does cheap classification. `reason()` handles thinking models that return output in
-  `reasoning`, `reasoning_content` or `<think>` tags. `draft()` gives the persona voice through an
-  identity in the system message. All calls retry with exponential backoff on rate limits and
-  timeouts.
-- **`pipeline.py`**: `run_pipeline()` connects the stages and puts a try/except around each one.
-  The JSON extraction handles LLM responses inside markdown fences or after preamble text.
-  `run_batch()` adds rate limits and run logs. The async versions do the same with a semaphore
-  that limits concurrency.
-- **`agent.py`**: `Agent`, `AsyncAgent`, `AgentResult` and `tool_spec`. A bounded tool-calling loop
-  with schemas made from type hints. It does not depend on the pipeline. The agent works with any
-  model and any callable tools.
-- **`persona.py`**: loads YAML persona configs. `build_system_prompt()` gives the persona as an
-  identity ("You are Marcus Voss...") and not as an instruction. The identity form gives a more
-  consistent voice.
-- **`quality.py`**: default regex rules for AI writing patterns, and opt-in German rules
-  (`default_rules_de()`). `sanitize_input()` removes prompt injection from untrusted text. The
-  defaults are a starting point. Tune them for your domain.
-- **`state.py`**: a SQLite wrapper with three tables: items (deduplication), drafts (lifecycle) and
-  runs (logs). It works as a context manager, so connections close correctly.
-- **`versioning.py`**: `compute_prompt_hash(text)` returns a 16-character SHA-256 prefix for
-  replay determinism.
-- **`config.py`**: dataclasses. No environment variables and no global state.
-
-### Personas
-
-```yaml
-name: "Your Persona Name"
-identity: >
-  Background and perspective, written as if describing who this
-  person IS rather than what they should do.
-
-voice: >
-  How they communicate. Sentence structure, formality, patterns.
-
-expertise:
-  - Domain 1
-  - Domain 2
-
-constraints:
-  - Style rules specific to this persona
-
-example_outputs:
-  - >
-    A sample of how this persona writes.
-```
-
-### Cost-gated grounding
-
-`ground_fn` calls can be the most expensive step. Skip them when the question does not need new
-data:
-
-```python
-def needs_search(item, persona, config) -> bool:
-    return "today" in item["text"].lower() or "current" in item["text"].lower()
-
-config = PipelineConfig(..., ground_fn=tavily_search, needs_search=needs_search)
-```
-
-The async config accepts a sync predicate or a predicate that returns an awaitable.
-
-### Custom quality rules
-
-```python
-from simple_agent import QualityRule, default_rules
-
-my_rules = default_rules() + [
-    QualityRule(name="no_jargon", pattern=r"\b(?:synergize|leverage|ideate)\b",
-                description="Corporate jargon."),
-]
-
-config = PipelineConfig(..., quality_rules=my_rules)
-```
-
-Rules on a persona **replace** the pipeline defaults for the drafts of that persona:
-
-```python
-persona.quality_rules = [
-    QualityRule(name="no_em_dash", pattern=r"\u2014", description="In-house style."),
-]
-```
-
-### Prompt versioning
-
-```python
-from simple_agent import compute_prompt_hash
-
-PROMPT_V1 = "Classify the sentiment of this content: ..."
-PROMPT_V1_HASH = compute_prompt_hash(PROMPT_V1)  # 16-char SHA-256 prefix
-```
-
-Keep a hash next to the prompt. Then replays of stored prompt logs can verify themselves.
+| File | What it holds | Written by |
+|---|---|---|
+| `inbox/events.jsonl` | every event, once, keyed by a digest | adapters, the operator door, `collect` |
+| `inbox/acks.jsonl` | one row for each finished event, with its outcome signature | `done`, `report_to_owner` |
+| `record.jsonl` | every event, model reply, tool call, result and failure | each turn |
+| `folds.jsonl` | summaries of old stretches of the record | the context compiler |
+| `journal.jsonl` | a `begin` and an `end` row for each write | `journaled_write` |
+| `outcomes.jsonl` | signed outcomes | `done` |
+| `reports.jsonl` | signed reports to other owners | `report_to_owner` |
+| `reminders.jsonl` | reminders that the agent set | `remind` |
+| `questions.sqlite` | questions, options, answers | `ask_operator`, `steward answer` |
+| `key` | the HMAC key, mode 0600 | the first start |
+| `stamp.json` | the result of the last pass | the end of each pass |
+
+`store.append` writes one row and calls `fsync` before it returns. A kill during an append can
+leave a torn last line. The next append starts a new line first, so the fragment does not
+swallow the next row. A line that does not parse is reported as a failure of the pass. It is
+never dropped in silence.
+
+## One pass
+
+1. `collect` puts every new fact into the inbox: new issues and comments, due reminders,
+   answered questions, and open journal entries.
+2. The wake gate sorts every pending event into `wake`, `waiting` or `deferred`.
+3. When nothing wakes, the pass writes the stamp and ends.
+4. A turn offers the woken and the deferred events. A waiting event is not offered before its
+   due time.
+5. The model calls tools until it returns a reply without a tool call, or until
+   `report_to_owner` or the fuse ends the turn.
+6. The pass runs another turn while events wake and the last turn finished at least one event.
+
+The turn message carries every offered event, the ids that woke the turn, the waiting events and
+the open questions. The standing file says that these arrive without a call. No tool lists events.
+
+## Acknowledge an event
+
+`done(event_id, outcome)` does three things in this order:
+
+1. It builds the outcome row: event, outcome text, status, failures of the turn, turn number.
+2. It signs the row and appends it to `outcomes.jsonl`.
+3. It appends the ack to `acks.jsonl`.
+
+A kill between step 2 and step 3 offers the event again at the next start. Delivery is therefore
+at least once. `test_kill.py` shows the outcome twice and the ack once.
+
+The status is `failed` when any tool call of the turn failed. The failures go into the outcome.
+So a failed read can never produce a clean outcome.
+
+## Order of a write
+
+`journaled_write` reads the state before and appends a `begin` row with the intent. Then it sends
+the write, reads the state back and appends an `end` row. Label writes also compare the read-back with the
+intent. A difference ends the entry as failed.
+
+A kill after the `begin` row leaves an open entry. At the next start it becomes an `open_write`
+event with the note "Write begun, outcome unknown". The agent reads the target and marks the event
+done. Its outcome closes the entry as "outcome unknown", so undo refuses it.
+
+Undo of a label write sets the old labels again, through the journal. It refuses when the labels
+changed after the write. Undo of a comment adds a correction comment. Nothing is deleted.
+
+## Identity
+
+The adapter sets `sender` and `role` on each event. The local tracker takes the sender from the
+owner of the issue file. Every issue and comment gets the role `reporter`. The GitHub adapter
+takes the sender from `user.login`, and gives `operator` only to logins in `operator_logins`.
+
+The operator door is the command line. `answer`, `tell` and `undo` check the Unix account that
+runs them against `operator_uids`. Text inside an event never changes its role.
+
+The steward signs its own comments. The adapter skips a comment as the steward's own only when its
+signature verifies. A comment with the author "steward" and a bad signature is a reporter's comment.
+
+## Memory
+
+The context of a turn has three parts:
+
+- The head: the start of the first turn, verbatim.
+- The folds: summaries, in order.
+- The tail: every entry after the last fold, verbatim.
+
+When the parts are larger than `context_budget_tokens`, the compiler folds the oldest entries
+of the tail into one summary. One fold takes up to `fold_chunk_tokens`. The newest turn is never
+folded. With no budget in the config, nothing folds. A failed fold call is a failure of the turn,
+and the events stay pending.
+
+Token counts are an estimate of four characters for each token. The estimate only sizes the view.
+
+`history_search(pattern)` searches the raw record with a Python regular expression. A bad pattern
+is a failure. It never reads as "no match".
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | The command succeeded. `verify`: every row has a valid signature. |
+| 1 | The pass ran and recorded a failure. `liveness`: the last pass failed. |
+| 3 | Refused or unusable: bad config, unknown account, missing key, bad pattern, any unexpected error. |
+| 10 | `verify` found rows without a valid signature. |
+
+The CLI catches every exception and returns 3. A crash can therefore never look like a pass.
+
+## Limits
+
+`config.load` refuses a number outside `[limits]` and a limit without `kind` and `source`. The
+kinds are `system` (a limit of the system itself), `measured`, `ruling` and `guard`.
+
+| Limit | Kind | Why |
+|---|---|---|
+| `tool_call_fuse` | guard | Stops a runaway turn. It is twice the busiest measured turn. A test ties the value to the rehearsal. |
+| `comment_settle_seconds` | ruling | Lets a burst of comments end before one turn reads them. |
+| `context_budget_tokens` | ruling | Small in the demo, so that a fold happens in the rehearsal. |
+| `fold_chunk_tokens` | ruling | Half of the demo budget. A fold has an almost fixed price, so measure it on your model before you change it. |
+
+Some values are absent on purpose. The model client keeps its own default timeout and retries.
+`liveness` has no age limit until you measure your feed and add `liveness_pending_age_seconds`.
+Searches and lists have no caps.
+
+## Rehearsal
+
+`steward run --replay FILE` makes a folder under `rehearsals/`. It copies the three steward files
+and builds a read-only tracker from the issue snapshots in the recording. It has no adapter to a
+live tracker. Writes run in dry-run: they are journaled and not sent. A recording has the format of
+`inbox/events.jsonl`, so the inbox of a live steward is also a recording.
+
+Do not run a dry-run phase on a live feed. The agent would close events whose writes never landed.
+
+## Omitted features
+
+- **A long-running process.** `steward run` is one pass. A supervisor starts it, for example a
+  systemd path unit on the tracker folder or a timer. A persistent-agent host does this in
+  production.
+- **Comments from GitHub.** The GitHub adapter reads issues, labels and comments, and writes
+  labels and comments. It makes events for new issues only.
+- **Push of questions to a phone.** Questions wait in SQLite until the operator runs
+  `steward questions`. A notifier would read the same table.
+- **Gated actions.** The tool set has no delete, close or send tool. Actions such as payments or
+  messages in the operator's name stay outside the tool set.
+- **A lint of the standing file.** The rehearsal prints counts for a person to read. It does not
+  find a rule that the agent can settle only by a write. Read the counts and the comments.
+- **Scale.** Each operation reads its JSONL file in full. That is simple and correct for a demo.
+  A large inbox needs an index.

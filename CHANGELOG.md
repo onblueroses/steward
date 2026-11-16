@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-16
+
+### Changed
+- The project is now `steward`: a small persistent owner agent for one domain. It replaces the
+  earlier agent and pipeline library.
+
+### Added
+- A durable inbox, a wake gate, folded memory with a raw-record search, journaled writes with
+  undo, signed outcomes, questions to the operator, a rehearsal mode and a liveness check.
+- An example domain: an issue tracker in local files, a recording and a deterministic demo model.
+- An optional GitHub issues adapter, off by default.
+
+### Removed
+- The pipeline, persona, quality, state and versioning modules, the async agent and the examples.
+
 ## [0.3.1] - 2026-05-16
 
 ### Fixed
