@@ -1,6 +1,0 @@
-{
-  "venvPath": ".",
-  "venv": ".venv",
-  "include": ["simple_agent", "tests"],
-  "exclude": ["**/__pycache__", "**/.venv"]
-}
