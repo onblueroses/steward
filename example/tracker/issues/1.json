@@ -1,0 +1,7 @@
+{
+  "id": "1",
+  "title": "App crashes when the config file is empty",
+  "body": "Starting with an empty config gives a KeyError and the app exits.",
+  "labels": [],
+  "comments": []
+}

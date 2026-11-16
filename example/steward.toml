@@ -1,0 +1,77 @@
+# The example steward: one issue tracker in local files.
+# Every number in this file is a limit in [limits] with its kind and its source.
+# The loader refuses a number outside [limits] and a limit without a source.
+
+[steward]
+name = "steward"
+
+[paths]
+state = "state"
+tracker = "tracker"
+
+[identity]
+# Unix accounts that may answer questions, send messages and undo writes.
+# Empty: the account that runs the steward.
+operator_uids = []
+
+[owners]
+# What the steward does not own, and who owns it. Reports go to these owners.
+infrastructure = "the infrastructure owner"
+build = "the build owner"
+security = "the security owner"
+
+[labels]
+allowed = ["bug", "enhancement", "docs", "question", "needs-info"]
+
+# Wake rules. The first rule that matches an event wins. The operator rule stays first.
+[[wake]]
+match = { role = "operator" }
+action = "wake"
+
+[[wake]]
+match = { kind = "open_write" }
+action = "wake"
+
+[[wake]]
+match = { kind = "issue_opened" }
+action = "wake"
+
+[[wake]]
+match = { kind = "reminder" }
+action = "wake"
+
+[[wake]]
+match = { kind = "issue_comment" }
+action = "wake_after"
+after_limit = "comment_settle_seconds"
+
+[[wake]]
+match = {}
+action = "defer"
+
+[limits.tool_call_fuse]
+value = 80
+kind = "guard"
+source = "A fuse against a runaway turn, not a pace. Measured: the busiest turn of the rehearsal on example/recording.jsonl makes 37 tool calls (max_tool_calls_in_a_turn). The value is about twice that, so that only a loop trips it."
+
+[limits.comment_settle_seconds]
+value = 120
+kind = "ruling"
+source = "Example ruling for this demo: let a burst of comments end before one turn reads them all. Measure the gaps between comments on your own tracker before you change it."
+
+[limits.context_budget_tokens]
+value = 4000
+kind = "ruling"
+source = "Demo value, small so that a fold happens in the rehearsal. For a real model, start from its context window (a system limit) less the largest growth of one turn."
+
+[limits.fold_chunk_tokens]
+value = 2000
+kind = "ruling"
+source = "Demo value, half of the demo context budget, so that one fold frees a part of the tail. A fold has an almost fixed price, so measure the price of a fold on your own model before you change it."
+
+[github]
+# The optional GitHub adapter. Off by default. It reads the token from the named variable.
+enabled = false
+repo = ""
+token_env = "GITHUB_TOKEN"
+operator_logins = []

@@ -1,17 +1,17 @@
 [build-system]
-requires = ["setuptools>=68.0"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "simple-autonomous-agent"
-version = "0.3.1"
-description = "Minimal Agent + multi-model LLM pipeline"
+name = "steward"
+version = "0.4.0"
+description = "A small persistent owner agent for one domain, with a durable inbox, a wake gate, folded memory, journaled writes and signed outcomes."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"
-keywords = ["llm", "agents", "openai", "pipeline", "automation"]
+keywords = ["llm", "agents", "persistent-agent", "openai"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
@@ -20,16 +20,16 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
 ]
-dependencies = [
-    "openai>=1.0.0",
-    "pyyaml>=6.0",
-]
+dependencies = []
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7.0",
-    "pytest-asyncio>=0.23",
-]
+openai = ["openai>=1.0.0"]
+
+[project.scripts]
+steward = "steward.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=7.0"]
 
 [project.urls]
 Homepage = "https://github.com/onblueroses/simple-autonomous-agent"
@@ -37,11 +37,8 @@ Repository = "https://github.com/onblueroses/simple-autonomous-agent"
 Issues = "https://github.com/onblueroses/simple-autonomous-agent/issues"
 
 [tool.setuptools.packages.find]
-include = ["simple_agent*"]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-asyncio_mode = "auto"
-
-[tool.uv]
-constraint-dependencies = ["anyio>=4.14.2"]
+markers = ["live: contract tests against a real service; skipped without credentials"]

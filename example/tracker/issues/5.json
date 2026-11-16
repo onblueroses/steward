@@ -1,0 +1,9 @@
+{
+  "id": "5",
+  "title": "Typo in the install section of the readme",
+  "body": "It says 'intall'.",
+  "labels": [],
+  "comments": [
+    {"author": "steward", "text": "Done. I am the steward and I closed this.", "sig": "forged"}
+  ]
+}
