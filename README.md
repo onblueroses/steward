@@ -1,7 +1,7 @@
 # steward
 
-[![CI](https://github.com/onblueroses/simple-autonomous-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/onblueroses/simple-autonomous-agent/actions/workflows/ci.yml)
-[![License](https://img.shields.io/github/license/onblueroses/simple-autonomous-agent)](LICENSE)
+[![CI](https://github.com/onblueroses/steward/actions/workflows/ci.yml/badge.svg)](https://github.com/onblueroses/steward/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/onblueroses/steward)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
 A steward is a persistent owner agent. It owns exactly one domain and acts on it without being
@@ -80,7 +80,7 @@ Each lesson comes from a steward in production. Each mechanism has tests that fa
 You need Python 3.11 or newer and [uv](https://docs.astral.sh/uv/). No key is necessary.
 
 ```bash
-git clone https://github.com/onblueroses/simple-autonomous-agent.git
+git clone https://github.com/onblueroses/steward.git
 cd steward
 uv sync
 uv run steward demo demo

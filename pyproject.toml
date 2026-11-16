@@ -32,9 +32,9 @@ steward = "steward.cli:main"
 dev = ["pytest>=7.0"]
 
 [project.urls]
-Homepage = "https://github.com/onblueroses/simple-autonomous-agent"
-Repository = "https://github.com/onblueroses/simple-autonomous-agent"
-Issues = "https://github.com/onblueroses/simple-autonomous-agent/issues"
+Homepage = "https://github.com/onblueroses/steward"
+Repository = "https://github.com/onblueroses/steward"
+Issues = "https://github.com/onblueroses/steward/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
